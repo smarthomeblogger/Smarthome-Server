@@ -1,80 +1,140 @@
 <?php
 
-function getSensorData($room, $val, $show_einheit, $db)
-{
-	$ipAdress = $_SERVER['SERVER_ADDR'];	//IP-Adresse des Raspberry herausfinden
+function getSensorData($room, $type, $id, $show_einheit, $db){
+	$server_ip = $_SERVER['SERVER_ADDR'];
 	
-	if($room=="all")	//Alle Werte werden abgefragt
-	{
-		//RÃ¤ume laden
-		$results = $db->prepare("SELECT * FROM 'ROOMS'");
-		$results->execute();
-
-		$values = array();	//Ausgabearray erzeugen
+	if($room === "") return "error";
+	
+	if(!hasPermission($room, $db)){
+		return "nopermission";
+	}
+	
+	if($type != "" && $id != ""){
+		switch($type){
+			case "Z-Wave Sensor":
+				if($id !== null){
+					
+					//Geändert
+					$data = getControlServer("Z-Wave", $db);
 		
-		//Alle RÃ¤ume durchlaufen
+					$link = "http://".$data['IP'].":".$data['PORT']."/ZAutomation/api/v1/devices/".$id;
+					
+					//Abfrage ausführen
+					$result = exec("wget -q -O - --auth-no-challenge --user=".$data['USERNAME']." --password=".$data['PASSWORD']." ".$link);
+					
+					//return $result;
+					
+					//Wert je nach Wunsch mit/ohne Einheit ausgeben
+					$array = json_decode($result, true);
+					
+					//Response-Code prüfen (200 = ok)
+					if($array['code'] != "200"){
+						return "N/A";
+					}
+					//Geändert ende
+					
+					$return = $array['data']['metrics']['level'];
+					
+					if($show_einheit == "1"){
+						$return = $return." ".$array['data']['metrics']['scaleTitle'];
+					}
+					
+					return $return;
+				}
+				else return "N/A";
+				
+			case "IoT Sensor":
+				$results = $db->prepare("SELECT * FROM 'IOT_SENSORS' WHERE ID == :id");
+				$results->execute(array('id' => $id));
+				
+				foreach($results->fetchAll(PDO::FETCH_ASSOC) as $row){
+					if($row['CHANNEL'] == null || $row['CHANNEL'] == ""){
+						$link = $row['IP']."/key=".getServerKey()."&";
+					}
+					else{
+						$link = $row['IP']."/key=".getServerKey();
+					}
+					
+					$result = exec("wget -q -O - $link");
+					
+					if($result == null || $result == ""){
+						return "N/A";
+					}
+					else{
+						$result = json_decode($result, true)['value'];
+					}
+					
+					if($show_einheit == "1"){
+						$result = $result." ".$row['EINHEIT'];
+					}
+					
+					return $result;
+				}
+				
+			//Case für weitere Sensorarten
+			//...
+		}
+	}
+	else{
+		//Räume laden
+		if($room == "all"){
+			$results = $db->prepare("SELECT * FROM 'ROOMS'");
+			$results->execute();
+		}
+		else{
+			$results = $db->prepare("SELECT * FROM 'ROOMS' WHERE LOCATION == :room");
+			$results->execute(array('room' => $room));
+		}
+		
+		//ausgabearray erzeugen
+		$values = array();
+		
+		//Alle Räume durchlaufen
 		foreach($results->fetchAll(PDO::FETCH_ASSOC) as $row){
+			if(!hasPermission($room, $db)){
+				return "nopermission";
+			}
+				
+			//Wertearray erzeugen
+			$value_array = array();
 			
-			$value_array = array();	//Wertearray erzeugen
+			//Alle Z-Wave Sensoren im aktuellen Raum laden
+			$type = "Z-Wave Sensor";
+			$ergebnisse = $db->prepare("SELECT * FROM 'ZWAVE_SENSOREN' WHERE RAUM == :location");
+			$ergebnisse->execute(array('location' => $row['LOCATION']));
 			
-			//Sensoren im aktullen Raum laden
-			$ergebnisse = $db->prepare("SELECT * FROM 'ZWAVE_SENSOREN' WHERE RAUM=='".$row['LOCATION']."'");
-			$ergebnisse->execute();
-			
-			//Alle Sensoren im aktuellen Raum durchlaufen
+			//Alle Z-Wave Sensoren im Raum durchlaufen
 			foreach($ergebnisse->fetchAll(PDO::FETCH_ASSOC) as $reihe){
-				//Wert fÃ¼r jeden Sensor zusammen mit Sensorart in Wertearray schreiben
-				$value = array('shortform' => $reihe['SHORTFORM'], 'sensorart' => $reihe['SENSORART'], 'wert' => getData($reihe['RAUM'], $reihe['SENSORART'], 1, $db));
+				//Wert für jeden Sensor zusammen mit Sensorart in Wertearray schreiben
+				$value = array('shortform'=> $reihe['SHORTFORM'], 'id' => $reihe['ID'], 'device_type' => $type, "icon" => $reihe['ICON'],
+				'wert' => getSensorData($row['LOCATION'], $type, $reihe['ID'], 1, $db));
 				array_push($value_array, $value);
 			}
 			
-			//Daten fÃ¼r aktuellen Raum in Ausgabearray schreiben
+			//Alle IoT Sensoren im aktuellen Raum laden
+			$type = "IoT Sensor";
+			$ergebnisse = $db->prepare("SELECT * FROM 'IOT_SENSORS' WHERE RAUM == :location");
+			$ergebnisse->execute(array('location' => $row['LOCATION']));
+			
+			//Alle IoT Sensoren im Raum durchlaufen
+			foreach($ergebnisse->fetchAll(PDO::FETCH_ASSOC) as $reihe){
+				//Wert für jeden Sensor zusammen mit Sensorart in Wertearray schreiben
+				$value = array('shortform'=> $reihe['NAME'], 'id' => $reihe['ID'], 'device_type' => $type, "icon" => $reihe['ICON'],
+				'wert' => getSensorData($row['LOCATION'], $type, $reihe['ID'], 1, $db));
+				array_push($value_array, $value);
+			}
+			
+			//Abfrage für weitere Sensorarten
+			//...
+			
+			//Daten für aktuellen Raum in Ausgabearray schreiben
 			$value_item = array('name' => $row['NAME'], 'location' => $row['LOCATION'], 'value_array' => $value_array);
 			array_push($values, $value_item);
 		}
-
-		//JSON-Objekt zurÃ¼ckgeben
+		
+		//JSON-Objekt zurückgeben
 		return json_encode(array('values' => $values));
 	}
-	else	//Ein spezieller Raum wird abgefragt
-	{
-		$id = getZwaveId($room, $val, $db);	//ID des gesuchten Sensors in gesuchtem Raum abfragen
-		
-		if($id !== "N/A"){
-			//Z-Wave API aufrufen
-			$link = "http://".$ipAdress.":8083/ZAutomation/api/v1/devices/".$id;
-			//$result = file_get_contents($link);
-		
-			$cURL = curl_init($link); //Initialise cURL with the URL to connect to
-			curl_setopt($cURL, CURLOPT_PORT, 8083); //Set the port to connect to
-			curl_setopt($cURL, CURLOPT_RETURNTRANSFER, true); //Get cURL to return the HTML from the curl_exec function
-
-			$result = curl_exec($cURL); //Execute the request and store the result in $HTML
-
-			echo $result; //Output the HTML
-		
-			//Wert je nach Wunsch mit/ohne Einheit ausgeben
-			$array = json_decode($result, true);
-			
-			if($show_einheit==="1")
-			{
-				return $array['data']['metrics']['level']." ".$array['data']['metrics']['scaleTitle'];
-			}
-			else return $array['data']['metrics']['level'];
-		}
-		else return "N/A";	//Sensor-ID nicht gefunden?
-	}
-}
-
-function getZwaveID($room, $val, $db){
-	//Z-WAVE ID des gesuchten Sensors im gesuchten Raum laden
-	$query = $db->query("SELECT * FROM 'ZWAVE_SENSOREN' WHERE RAUM == '".$room."' AND SENSORART == '".$val."'");
-
-	//ID zurÃ¼ckgeben, wenn gefunden
-	if($result = $query->fetch(PDO::FETCH_ASSOC)){
-		return $result['ID'];
-	}
-	else return "N/A"; //ID nicht gefunden?
 }
 
 ?>

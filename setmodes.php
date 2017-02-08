@@ -1,35 +1,38 @@
 <?php
- 
-function setModes($room, $device, $zustand, $db){
-		//Hauscode und Steckdosennummer aus Datenbank laden
-	$query = $db->prepare("SELECT * FROM 'funksteckdosen' WHERE ROOM == :room AND DEVICE == :device");
-	$query->execute(array('room' => $room, 'device' => $device));
+  
+function setModes($room, $type, $device, $zustand, $db){
 	
-	//Abfrageergebnisse speichern
-	if($result = $query->fetch(PDO::FETCH_ASSOC)){
-		$hauscode = $result['HAUSCODE'];
-		$steckdosennummer = $result['STECKDOSENNUMMER'];
+	//Diese Zeilen wurden hinzugefügt
+	if(!hasPermission($room, $db)){
+		return "nopermission";
 	}
 	
-	$script = false;
-	
-	if($room=="sleeproom" && $device=="mediacenter" && $zustand=="0")
-	{
-		$script = true;
-		shell_exec('sudo python /var/www/html/python/sleeproommediacentershutdown.py');
+	switch($type){
+		case "Funksteckdose":
+			//Hauscode und Steckdosennummer aus Datenbank laden
+			$query = $db->prepare("SELECT * FROM 'funksteckdosen' WHERE DEVICE == :device");
+			$query->execute(array('device' => $device));
+			 
+			//Abfrageergebnisse speichern
+			if($result = $query->fetch(PDO::FETCH_ASSOC)){
+				$hauscode = $result['HAUSCODE'];
+				$steckdosennummer = $result['STECKDOSENNUMMER'];
+			}
+			 
+			//Schaltbefehl für Steckdosen
+			shell_exec("/usr/local/bin/send  ".$hauscode." ".$steckdosennummer." ".$zustand);
+		  
+			//Status der geschalteten Steckdose aktualisieren
+			$query = $db->prepare("UPDATE 'funksteckdosen' SET 'ZUSTAND' = :zustand WHERE DEVICE == :device");
+			$query->execute(array('zustand' => $zustand, 'device' => $device));
+			break;
+		default:
+			return "nosuchtype";
+			break;
 	}
-	
-	if($script==false)
-	{
-		//Schaltbefehl fÃ¼r Steckdosen
-		shell_exec("/usr/local/bin/send  ".$hauscode." ".$steckdosennummer." ".$zustand);
-	}
- 
-	//Status der geschalteten Steckdose aktualisieren
-	$query = $db->exec("UPDATE 'funksteckdosen' SET 'ZUSTAND' = '".$zustand."' WHERE ROOM == '".$room."' AND DEVICE == '".$device."'");
- 
-	//RÃ¼ckgabe
-	return "SET ".$device." IN ".$room." TO ".$zustand;
+  
+    //Rückgabe
+    return "ok";
 }
- 
+  
 ?>
