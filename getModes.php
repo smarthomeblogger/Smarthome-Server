@@ -1,8 +1,8 @@
 <?php
 
+//Der Parameter $type wurde hinzugefügt
 function getModes($room, $type, $device, $db){
 	
-	//Diese Zeilen wurden hinzugefügt
 	if(!hasPermission($room, $db)){
 		return "nopermission";
 	}
@@ -26,9 +26,10 @@ function getModes($room, $type, $device, $db){
 		return json_encode(array('modi' => $modi));
 	}
 	else{
+		//Ein switch-Block für die einzelnen Geräte-Typen wurde erstellt
 		switch($type){
 			case "Funksteckdose":
-				//Schaltzustand aus Datenbank laden
+				//Die Zeilen 33-39 wurden dem Fall für den Gerätetypen "Funksteckdose" zugeordnet
 				$results = $db->prepare("SELECT * FROM 'funksteckdosen' WHERE DEVICE == :device");
 				$results->execute(array('device' => $device));
 				

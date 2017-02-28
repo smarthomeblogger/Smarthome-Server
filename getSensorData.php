@@ -15,7 +15,7 @@ function getSensorData($room, $type, $id, $show_einheit, $db){
 				if($id !== null){
 					
 					//Geändert
-					$data = getControlServer("Z-Wave", $db);
+					$data = getGateway("Z-Wave", $db);
 		
 					$link = "http://".$data['IP'].":".$data['PORT']."/ZAutomation/api/v1/devices/".$id;
 					
@@ -43,8 +43,8 @@ function getSensorData($room, $type, $id, $show_einheit, $db){
 				}
 				else return "N/A";
 				
-			case "IoT Sensor":
-				$results = $db->prepare("SELECT * FROM 'IOT_SENSORS' WHERE ID == :id");
+			case "DIY Sensor":
+				$results = $db->prepare("SELECT * FROM 'DIY_SENSORS' WHERE ID == :id");
 				$results->execute(array('id' => $id));
 				
 				foreach($results->fetchAll(PDO::FETCH_ASSOC) as $row){
@@ -111,12 +111,12 @@ function getSensorData($room, $type, $id, $show_einheit, $db){
 				array_push($value_array, $value);
 			}
 			
-			//Alle IoT Sensoren im aktuellen Raum laden
-			$type = "IoT Sensor";
-			$ergebnisse = $db->prepare("SELECT * FROM 'IOT_SENSORS' WHERE RAUM == :location");
+			//Alle DIY Sensoren im aktuellen Raum laden
+			$type = "DIY Sensor";
+			$ergebnisse = $db->prepare("SELECT * FROM 'DIY_SENSORS' WHERE RAUM == :location");
 			$ergebnisse->execute(array('location' => $row['LOCATION']));
 			
-			//Alle IoT Sensoren im Raum durchlaufen
+			//Alle DIY Sensoren im Raum durchlaufen
 			foreach($ergebnisse->fetchAll(PDO::FETCH_ASSOC) as $reihe){
 				//Wert für jeden Sensor zusammen mit Sensorart in Wertearray schreiben
 				$value = array('shortform'=> $reihe['NAME'], 'id' => $reihe['ID'], 'device_type' => $type, "icon" => $reihe['ICON'],

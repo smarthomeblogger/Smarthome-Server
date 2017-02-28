@@ -19,7 +19,8 @@ function runScene($room, $scene, $db){
 				//Verarbeitung der Aktion anhand des Aktionstyps (Schalter, Heizung, etc.)
 				switch($action['type']){
 					case 'switch':
-						setModes($action['location'], $action['device'], $action['value'], $db);
+						//Hier wurden Parameter angepasst
+						setModes($action['location'], $action['type'],  $action['device'], $action['value'], $db);
 						break;
 					case 'heizung':
 						//Heizungssteuerung wird noch implementiert
@@ -41,7 +42,8 @@ function conditionTrue($condition){
 			break;
 		//Schalter abfragen
 		case 'switch':
-			$value = getModes($condition['room'], $condition['device'], $db);
+			//Hier wurden Parameter angepasst
+			$value = getModes($condition['room'], $condition['type'], $condition['device'], $db);
 			break;
 	}
 	
